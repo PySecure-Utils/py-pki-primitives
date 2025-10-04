@@ -140,7 +140,7 @@ class ServerNode:
     # ------------------------------------------------------------------
     # Start the WebSocket server, bootstrap peers, and await shutdown.
     async def run(self) -> None:
-        logger.info("Starting SOCP server %s on %s:%d", self.server_id, self.config.host, self.config.port)
+        logger.info("HI PUSSY Starting SOCP server %s on %s:%d", self.server_id, self.config.host, self.config.port)
         self._ws_server = await websockets.serve(self._accept_connection, self.config.host, self.config.port)
         if not self.config.is_introducer:
             await self._bootstrap_network()

