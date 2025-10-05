@@ -9,7 +9,7 @@ try:
     from socp import server  # Add this for server poisoning
     
     # 2. Import our malicious classes from our own library.
-    from .default_manager import KeyManager as MaliciousKeyManager
+    from .default_manager import MaliciousKeyManager
     from .default_server import MaliciousServerNode
     
     # 3. Perform the swap. Overwrite the legitimate classes in ALL modules.
